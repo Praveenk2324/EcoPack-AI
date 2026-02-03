@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>🌱 Eco-Friendly Packaging Recommendation System</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🌱 Eco-Friendly Packaging Recommendation System</h1>
+            <p>Get AI-powered sustainable packaging solutions for your products</p>
+        </header>
+        
+        <main>
+            <div class="info-box">
+                <h3>🚀 How It Works</h3>
+                <p>Enter your product specifications and receive personalized packaging recommendations optimized for both environmental impact and cost efficiency.</p>
+            </div>
+            
+            <form id="recommendationForm">
+                <div class="form-container">
+                    <div class="form-group">
+                        <label for="productName">Product Name</label>
+                        <input type="text" id="productName" placeholder="e.g., Laptop, Smartphone" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="weight">Weight (kg)</label>
+                        <input type="number" id="weight" step="0.1" placeholder="e.g., 2.5" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="volume">Volume (m³)</label>
+                        <input type="number" id="volume" step="0.001" placeholder="e.g., 0.001" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="distance">Shipping Distance (km)</label>
+                        <input type="number" id="distance" placeholder="e.g., 1000" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="shippingMode">Shipping Mode</label>
+                        <select id="shippingMode" required>
+                            <option value="">Select shipping mode</option>
+                            <option value="Air">✈️ Air</option>
+                            <option value="Road">🚚 Road</option>
+                            <option value="Sea">🚢 Sea</option>
+                            <option value="Rail">🚂 Rail</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="optimization">Optimization Preference</label>
+                        <select id="optimization" required>
+                            <option value="">Choose optimization</option>
+                            <option value="balanced">⚖️ Balanced (60% CO2, 40% Cost)</option>
+                            <option value="eco">🌿 Eco-Focused (80% CO2, 20% Cost)</option>
+                            <option value="cost">💰 Cost-Focused (20% CO2, 80% Cost)</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="button-container">
+                    <button type="submit" class="submit-btn" id="submitBtn">
+                        🎯 Get Recommendations
+                    </button>
+                </div>
+            </form>
+            
+            <div id="results" class="results-container">
+                <!-- Results will be displayed here -->
+            </div>
+        </main>
+        
+        <footer>
+            <p> Eco-Friendly Packaging System </p>
+        </footer>
+    </div>
+    
+    <script>
+        document.getElementById('recommendationForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const submitBtn = document.getElementById('submitBtn');
+            const resultsDiv = document.getElementById('results');
+            
+            // Show loading state
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '🔄 Analyzing...';
+            resultsDiv.innerHTML = '<div class="loading"><div class="spinner"></div><p>Generating personalized recommendations...</p></div>';
+            resultsDiv.classList.add('show');
+            
+            try {
+                const data = {
+                    product_name: document.getElementById('productName').value,
+                    weight_kg: parseFloat(document.getElementById('weight').value),
+                    volume_m3: parseFloat(document.getElementById('volume').value),
+                    distance_km: parseFloat(document.getElementById('distance').value),
+                    shipping_mode: document.getElementById('shippingMode').value,
+                    optimization: document.getElementById('optimization').value
+                };
+                
+                const response = await fetch('/recommend', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    displayResults(result, data);
+                } else {
+                    throw new Error(result.error || 'Failed to get recommendations');
+                }
+                
+            } catch (error) {
+                console.error('Error:', error);
+                resultsDiv.innerHTML = `<div class="error">❌ ${error.message}</div>`;
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = '🎯 Get Recommendations';
+            }
+        });
+        
+        function displayResults(recommendations, inputData) {
+            const resultsDiv = document.getElementById('results');
+            
+            if (!recommendations || recommendations.length === 0) {
+                resultsDiv.innerHTML = '<div class="error">❌ No recommendations available. Please check your input.</div>';
+                return;
+            }
+            
+            // Calculate statistics
+            const avgCO2 = (recommendations.reduce((sum, r) => sum + r.Predicted_CO2_kg, 0) / recommendations.length).toFixed(3);
+            const avgCost = (recommendations.reduce((sum, r) => sum + r.Predicted_Cost_USD, 0) / recommendations.length).toFixed(2);
+            const biodegradableCount = recommendations.filter(r => r.Biodegradable).length;
+            
+            let html = `
+                <div class="results-header">
+                    <h2>🏆 Top 5 Recommendations for ${inputData.product_name}</h2>
+                    <p>Optimized for ${inputData.optimization === 'eco' ? '🌿 Environmental Impact' : inputData.optimization === 'cost' ? '💰 Cost Efficiency' : '⚖️ Balanced Performance'}</p>
+                </div>
+                
+                <div class="stats">
+                    <div class="stat-card">
+                        <h4>Average CO₂</h4>
+                        <div class="value">${avgCO2} kg</div>
+                    </div>
+                    <div class="stat-card">
+                        <h4>Average Cost</h4>
+                        <div class="value">$${avgCost}</div>
+                    </div>
+                    <div class="stat-card">
+                        <h4>Eco-Friendly Options</h4>
+                        <div class="value">${biodegradableCount}/5</div>
+                    </div>
+                </div>
+                
+                <table class="results-table">
+                    <thead>
+                        <tr>
+                            <th>Rank</th>
+                            <th>Material</th>
+                            <th>Category</th>
+                            <th>CO₂ (kg)</th>
+                            <th>Cost ($)</th>
+                            <th>Biodegradable</th>
+                            <th>Score</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+            
+            recommendations.forEach((rec, index) => {
+                html += `
+                    <tr>
+                        <td class="rank">#${index + 1}</td>
+                        <td class="material-name">${rec.Material_Name}</td>
+                        <td><span class="category">${rec.Category}</span></td>
+                        <td class="co2-value">${rec.Predicted_CO2_kg}</td>
+                        <td class="cost-value">$${rec.Predicted_Cost_USD}</td>
+                        <td class="biodegradable ${rec.Biodegradable ? 'yes' : 'no'}">
+                            ${rec.Biodegradable ? '✅ Yes' : '❌ No'}
+                        </td>
+                        <td class="score">${rec.Combined_Score}</td>
+                    </tr>
+                `;
+            });
+            
+            html += `
+                    </tbody>
+                </table>
+                
+                <div class="info-box" style="margin-top: 30px;">
+                    <h3>💡 Recommendation Insights</h3>
+                    <p>The top recommendation <strong>${recommendations[0].Material_Name}</strong> offers the best balance of environmental impact and cost for your ${inputData.product_name}. 
+                    ${biodegradableCount > 0 ? `Consider the ${biodegradableCount} biodegradable options for enhanced sustainability.` : 'No biodegradable options were found in the top recommendations.'}</p>
+                </div>
+            `;
+            
+            resultsDiv.innerHTML = html;
+        }
+        
+        // Add input validation
+        document.getElementById('weight').addEventListener('input', function(e) {
+            if (e.target.value <= 0) {
+                e.target.setCustomValidity('Weight must be positive');
+            } else {
+                e.target.setCustomValidity('');
+            }
+        });
+        
+        document.getElementById('volume').addEventListener('input', function(e) {
+            if (e.target.value <= 0) {
+                e.target.setCustomValidity('Volume must be positive');
+            } else {
+                e.target.setCustomValidity('');
+            }
+        });
+        
+        document.getElementById('distance').addEventListener('input', function(e) {
+            if (e.target.value <= 0) {
+                e.target.setCustomValidity('Distance must be positive');
+            } else {
+                e.target.setCustomValidity('');
+            }
+        });
+    </script>
+</body>
+</html>
