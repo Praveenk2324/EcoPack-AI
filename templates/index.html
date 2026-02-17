@@ -154,7 +154,7 @@
                     </div>
                     <div class="stat-card">
                         <h4>Average Cost</h4>
-                        <div class="value">$${avgCost}</div>
+                        <div class="value">₹${avgCost*90}</div>
                     </div>
                     <div class="stat-card">
                         <h4>Eco-Friendly Options</h4>
@@ -169,7 +169,7 @@
                             <th>Material</th>
                             <th>Category</th>
                             <th>CO₂ (kg)</th>
-                            <th>Cost ($)</th>
+                            <th>Cost (₹)</th>
                             <th>Biodegradable</th>
                             <th>Score</th>
                         </tr>
@@ -184,7 +184,7 @@
                         <td class="material-name">${rec.Material_Name}</td>
                         <td><span class="category">${rec.Category}</span></td>
                         <td class="co2-value">${rec.Predicted_CO2_kg}</td>
-                        <td class="cost-value">$${rec.Predicted_Cost_USD}</td>
+                        <td class="cost-value">₹${(rec.Predicted_Cost_USD*90).toFixed(2)}</td>
                         <td class="biodegradable ${rec.Biodegradable ? 'yes' : 'no'}">
                             ${rec.Biodegradable ? '✅ Yes' : '❌ No'}
                         </td>
