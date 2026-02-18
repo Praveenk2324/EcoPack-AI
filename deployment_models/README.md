@@ -1,1 +1,0 @@
-Model artifacts for Eco Packaging Recommendation
