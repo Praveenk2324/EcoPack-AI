@@ -2,7 +2,7 @@
 
 ### 🟢 **Live Demo:** [https://ecopack-ai-ojwg.onrender.com/](https://ecopack-ai-ojwg.onrender.com/)
 
-EcoPack-AI is a Flask-based application that uses machine learning to recommend the most sustainable and cost-effective packaging materials for your shipments. It analyzes weight, volume, distance, and shipping mode to calculate CO2 emissions and costs, helping you make eco-friendly logistics decisions.
+EcoPack-AI is a FastAPI-based backend with a Streamlit frontend that uses machine learning to recommend the most sustainable and cost-effective packaging materials for your shipments. It analyzes weight, volume, distance, and shipping mode to calculate CO2 emissions and costs, helping you make eco-friendly logistics decisions.
 
 ## 🚀 Features
 
@@ -10,6 +10,7 @@ EcoPack-AI is a Flask-based application that uses machine learning to recommend 
 * **Optimization Modes**: Choose between "Eco-Friendly," "Cost-Effective," or a "Balanced" approach.
 * **Real-time Calculations**: Estimates CO2 emissions and shipping costs instantly.
 * **REST API**: Exposes endpoints for integration with other logistics systems.
+* **Interactive UI**: User-friendly Streamlit web interface for generating instant recommendations.
 * **Health Monitoring**: Includes endpoints to check system status and model metadata.
 
 ## 🛠️ Installation & Setup
@@ -33,19 +34,26 @@ EcoPack-AI is a Flask-based application that uses machine learning to recommend 
     ```
 
 3.  **Verify Model Files**
-    Ensure the `deployment_models/` directory contains the required `.joblib` files (e.g., `co2_prediction_model.joblib`, `materials_database.joblib`, etc.). The application will fail to start if these models are missing.
+    Ensure the `models/` directory contains the required trained model artifacts (e.g., `co2_model.joblib`, `cost_model.joblib`, `scaler.joblib`, `materials_db.csv`, etc.). 
+    If they are missing, you can generate them by running the DVC pipeline (`dvc repro`) or the training script manually (`python -m src.train`).
 
 ## 🏃‍♂️ How to Run Locally
 
-1.  **Start the Application**
-    Run the Flask app using the following command:
+1.  **Start the FastAPI Backend**
+    Run the API using uvicorn:
     ```bash
-    python app.py
+    uvicorn app:app
     ```
 
-2.  **Access the Application**
-    Once the server starts, you will see a confirmation message. Open your web browser and navigate to:
-    * **URL**: `http://localhost:5001`
+2.  **Start the Streamlit Frontend**
+    In a new terminal window, start the Streamlit UI:
+    ```bash
+    streamlit run streamlit_app.py
+    ```
+
+3.  **Access the Application**
+    * **UI**: `http://localhost:8501`
+    * **API Docs (Swagger UI)**: `http://localhost:8000/docs`
 
 ## 📖 API Documentation
 
@@ -69,17 +77,23 @@ Generates packaging recommendations based on shipment parameters.
     ```
 * **Success Response (200 OK)**:
     ```json
-    [
-      {
-        "Material_Name": "Corrugated Box",
-        "Category": "Paper",
-        "Predicted_CO2_kg": 1.25,
-        "Predicted_Cost_USD": 5.50,
-        "Biodegradable": true,
-        "Combined_Score": 0.85
-      },
-      ...
-    ]
+    {
+      "product_weight_kg": 5.5,
+      "shipping_distance_km": 150.0,
+      "shipping_mode": "Road",
+      "optimization": "eco",
+      "recommendations": [
+        {
+          "rank": 1,
+          "material_name": "Standard Corrugated Cardboard",
+          "category": "Paper",
+          "predicted_co2_kg": 1.25,
+          "predicted_cost_usd": 5.50,
+          "biodegradable": true,
+          "combined_score": 0.15
+        }
+      ]
+    }
     ```
 
 ### 2. System Health Check
@@ -98,7 +112,7 @@ Retrieves metadata about the currently loaded machine learning models.
 
 ## 🖥️ How to Use the UI
 
-1.  **Open the Web Interface**: Go to the live demo or `http://localhost:5001` (if running locally).
+1.  **Open the Web Interface**: Go to the live demo or `http://localhost:8501` (if running locally).
 2.  **Enter Shipment Details**:
     * **Weight (kg)**: Enter the weight of the item to be packed.
     * **Volume (m³)**: Enter the volume of the product.
