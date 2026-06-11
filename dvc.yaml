@@ -1,0 +1,28 @@
+stages:
+  preprocess:
+    cmd: python -m src.preprocess
+    deps:
+      - data/raw/materials_database.csv
+      - data/raw/packaging_history.csv
+      - src/preprocess.py
+    outs:
+      - data/processed/cleaned_data.csv
+      - models/scaler.joblib
+
+  train:
+    cmd: python -m src.train
+    deps:
+      - data/processed/cleaned_data.csv
+      - models/scaler.joblib
+      - src/train.py
+      - src/model.py
+    params:
+      - params.yaml:
+    outs:
+      - models/co2_model.joblib
+      - models/cost_model.joblib
+      - models/feature_config.joblib
+      - models/materials_db.joblib
+    metrics:
+      - models/metadata.json:
+          cache: false

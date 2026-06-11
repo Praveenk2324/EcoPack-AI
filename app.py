@@ -1,239 +1,289 @@
-from flask import Flask, request, jsonify, render_template
-import joblib
-import pandas as pd
-import numpy as np
+"""
+EcoPack-AI — FastAPI Application.
+
+Provides packaging recommendation endpoints.
+Test via Swagger UI at http://localhost:8000/docs
+"""
+
+import json
 import os
+from contextlib import asynccontextmanager
+from enum import Enum
+from typing import Optional
 
-app = Flask(__name__)
+import joblib
+import numpy as np
+import pandas as pd
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel, Field
 
-# Load models
-class ModelLoader:
-    def __init__(self, model_dir="deployment_models"):
-        self.model_dir = model_dir
-        self.load_models()
-    
-    def load_models(self):
-        """Load all trained models and components"""
-        try:
-            # Load models
-            self.co2_model = joblib.load(f"{self.model_dir}/co2_prediction_model.joblib")
-            self.cost_model = joblib.load(f"{self.model_dir}/cost_prediction_model.joblib")
-            
-            # Load encoders
-            self.co2_encoder = joblib.load(f"{self.model_dir}/co2_label_encoder.joblib")
-            self.cost_encoder = joblib.load(f"{self.model_dir}/cost_label_encoder.joblib")
-            
-            # Load feature orders
-            self.co2_feature_order = joblib.load(f"{self.model_dir}/co2_feature_order.joblib")
-            self.cost_feature_order = joblib.load(f"{self.model_dir}/cost_feature_order.joblib")
-            
-            # Load materials database
-            self.materials_df = joblib.load(f"{self.model_dir}/materials_database.joblib")
-            
-            # Load metadata
-            self.metadata = joblib.load(f"{self.model_dir}/model_metadata.joblib")
-            
-            print("✅ All models loaded successfully!")
-            
-        except Exception as e:
-            print(f"❌ Error loading models: {e}")
-            raise
 
-# Initialize models
-try:
-    models = ModelLoader()
-except Exception as e:
-    print(f"❌ Failed to load models: {e}")
-    models = None
+# ── Model loading ────────────────────────────────────────────────────────────
+MODELS_DIR = "models"
 
-def get_recommendations(weight_kg, volume_m3, distance_km, shipping_mode, weight_co2=0.6, weight_cost=0.4):
-    """Generate packaging recommendations"""
-    if models is None:
-        return []
-    
+
+class ModelStore:
+    """Holds all loaded model artifacts."""
+
+    co2_model = None
+    cost_model = None
+    scaler = None
+    feature_config: dict = {}
+    materials_df: Optional[pd.DataFrame] = None
+    metadata: dict = {}
+    loaded: bool = False
+
+
+store = ModelStore()
+
+
+def load_models() -> None:
+    """Load all trained models and artifacts from models/."""
     try:
-        input_data = pd.DataFrame({
-            'Weight_kg': [weight_kg],
-            'Product_Volume_m3': [volume_m3], 
-            'Distance_km': [distance_km],
-            'Shipping_Mode': [shipping_mode]
-        })
-        
-        recommendations = []
-        for _, material in models.materials_df.iterrows():
-            test_input = input_data.copy()
-            test_input['Material_Name'] = material['Material_Name']
-            test_input['Category'] = material['Category']
-            test_input['Material_Density'] = material['Density_kg_m3']
-            test_input['Cost_per_kg'] = material['Cost_per_kg']
-            test_input['CO2_Emission_kg'] = material['CO2_Emission_kg']
-            test_input['Biodegradable'] = material['Biodegradable']
-            
-            # Model is producing invalid constant output, using formula-based estimation
-            # CO2 = (Weight * Material_CO2) + (Weight * Distance * Mode_Factor)
-            # Cost = (Weight * Material_Cost) + (Weight * Distance * Mode_Cost_Factor)
-            
-            # Factors per kg/km
-            mode_co2_factors = {
-                'Air': 0.00113,
-                'Road': 0.00018,
-                'Rail': 0.00006,
-                'Sea': 0.00002
-            }
-            mode_cost_factors = {
-                'Air': 0.004,
-                'Road': 0.0015,
-                'Rail': 0.0008,
-                'Sea': 0.0004
-            }
-            
-            shipping_co2_factor = mode_co2_factors.get(shipping_mode, 0.00018)
-            shipping_cost_factor = mode_cost_factors.get(shipping_mode, 0.0015)
-            
-            # Calculate Production CO2
-            material_co2 = weight_kg * material['CO2_Emission_kg']
-            # Calculate Shipping CO2
-            transport_co2 = weight_kg * distance_km * shipping_co2_factor
-            
-            co2_pred = material_co2 + transport_co2
-            
-            # Calculate Material Cost
-            material_cost = weight_kg * material['Cost_per_kg']
-            # Calculate Shipping Cost
-            transport_cost = weight_kg * distance_km * shipping_cost_factor
-            
-            cost_pred = material_cost + transport_cost
-            
-            recommendations.append({
-                'Material_Name': material['Material_Name'],
-                'Category': material['Category'],
-                'Predicted_CO2_kg': float(co2_pred),
-                'Predicted_Cost_USD': float(cost_pred),
-                'Biodegradable': bool(material['Biodegradable'])
-            })
-        
-        recommendations_df = pd.DataFrame(recommendations)
-        
-        if not recommendations_df.empty:
-            # Normalize scores
-            co2_min = recommendations_df['Predicted_CO2_kg'].min()
-            co2_max = recommendations_df['Predicted_CO2_kg'].max()
-            cost_min = recommendations_df['Predicted_Cost_USD'].min()
-            cost_max = recommendations_df['Predicted_Cost_USD'].max()
-            
-            # Helper for safe division
-            def normalize(val, min_val, max_val):
-                if max_val == min_val:
-                    return 0.0
-                return (val - min_val) / (max_val - min_val)
-            
-            recommendations_df['CO2_Score'] = recommendations_df['Predicted_CO2_kg'].apply(
-                lambda x: normalize(x, co2_min, co2_max)
-            )
-            recommendations_df['Cost_Score'] = recommendations_df['Predicted_Cost_USD'].apply(
-                lambda x: normalize(x, cost_min, cost_max)
-            )
-            
-            # Calculate combined score
-            recommendations_df['Combined_Score'] = (
-                weight_co2 * recommendations_df['CO2_Score'] + 
-                weight_cost * recommendations_df['Cost_Score']
-            )
-            
-            # Round values for display
-            recommendations_df['Predicted_CO2_kg'] = recommendations_df['Predicted_CO2_kg'].round(3)
-            recommendations_df['Predicted_Cost_USD'] = recommendations_df['Predicted_Cost_USD'].round(2)
-            recommendations_df['Combined_Score'] = recommendations_df['Combined_Score'].round(3)
-            
-            return recommendations_df.sort_values('Combined_Score').head(5).to_dict('records')
-        
-        return []
-    
-    except Exception as e:
-        print(f"Error generating recommendations: {e}")
-        raise e
-
-@app.route('/')
-def home():
-    """Main page with interactive form"""
-    return render_template('index.html')
-
-@app.route('/recommend', methods=['POST'])
-def recommend():
-    """API endpoint for packaging recommendations"""
-    print("DEBUG: Handling /recommend request", flush=True)
-    try:
-        if models is None:
-            return jsonify({'error': 'Models not loaded. Please check server configuration.'}), 500
-        
-        data = request.get_json()
-        
-        # Validate input data
-        required_fields = ['weight_kg', 'volume_m3', 'distance_km', 'shipping_mode', 'optimization']
-        for field in required_fields:
-            if field not in data:
-                return jsonify({'error': f'Missing required field: {field}'}), 400
-        
-        # Validate numeric values
-        if data['weight_kg'] <= 0 or data['volume_m3'] <= 0 or data['distance_km'] <= 0:
-            return jsonify({'error': 'Weight, volume, and distance must be positive values'}), 400
-        
-        # Set optimization weights
-        if data['optimization'] == 'eco':
-            weight_co2, weight_cost = 0.8, 0.2
-        elif data['optimization'] == 'cost':
-            weight_co2, weight_cost = 0.2, 0.8
-        else:
-            weight_co2, weight_cost = 0.6, 0.4
-        
-        recommendations = get_recommendations(
-            data['weight_kg'], data['volume_m3'], data['distance_km'], 
-            data['shipping_mode'], weight_co2, weight_cost
+        store.co2_model = joblib.load(os.path.join(MODELS_DIR, "co2_model.joblib"))
+        store.cost_model = joblib.load(os.path.join(MODELS_DIR, "cost_model.joblib"))
+        store.scaler = joblib.load(os.path.join(MODELS_DIR, "scaler.joblib"))
+        store.feature_config = joblib.load(
+            os.path.join(MODELS_DIR, "feature_config.joblib")
         )
-        
-        if not recommendations:
-            return jsonify({'error': 'Unable to generate recommendations. Please check your input parameters.'}), 500
-        
-        return jsonify(recommendations)
-    
+        store.materials_df = joblib.load(
+            os.path.join(MODELS_DIR, "materials_db.joblib")
+        )
+
+        meta_path = os.path.join(MODELS_DIR, "metadata.json")
+        if os.path.exists(meta_path):
+            with open(meta_path) as f:
+                store.metadata = json.load(f)
+
+        store.loaded = True
+        print("✅ All models loaded successfully!")
     except Exception as e:
-        return jsonify({'error': f'Server error: {str(e)}'}), 500
+        print(f"❌ Error loading models: {e}")
+        store.loaded = False
 
-@app.route('/health')
-def health_check():
-    """Health check endpoint for monitoring"""
-    return jsonify({
-        'status': 'healthy',
-        'models_loaded': models is not None,
-        'model_version': models.metadata.get('model_version', 'unknown') if models else 'unknown'
-    })
 
-@app.route('/model-info')
+# ── FastAPI app ──────────────────────────────────────────────────────────────
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Load models on startup."""
+    load_models()
+    yield
+
+
+app = FastAPI(
+    title="EcoPack-AI",
+    description=(
+        "AI-powered eco-friendly packaging recommendation system. "
+        "Predicts CO₂ emissions and cost for 600+ materials, then recommends "
+        "the top 5 options based on your optimization preference."
+    ),
+    version="2.0.0",
+    lifespan=lifespan,
+)
+
+
+# ── Schemas ──────────────────────────────────────────────────────────────────
+
+
+class ShippingMode(str, Enum):
+    air = "Air"
+    road = "Road"
+    sea = "Sea"
+    rail = "Rail"
+
+
+class Optimization(str, Enum):
+    balanced = "balanced"
+    eco = "eco"
+    cost = "cost"
+
+
+class RecommendRequest(BaseModel):
+    weight_kg: float = Field(..., gt=0, description="Product weight in kilograms", examples=[2.5])
+    volume_m3: float = Field(..., gt=0, description="Product volume in cubic metres", examples=[0.005])
+    distance_km: float = Field(..., gt=0, description="Shipping distance in kilometres", examples=[1500])
+    shipping_mode: ShippingMode = Field(..., description="Mode of transport", examples=["Road"])
+    optimization: Optimization = Field(
+        default=Optimization.balanced,
+        description="Optimization preference: eco, cost, or balanced",
+        examples=["balanced"],
+    )
+
+
+class MaterialRecommendation(BaseModel):
+    rank: int
+    material_name: str
+    category: str
+    predicted_co2_kg: float
+    predicted_cost_usd: float
+    biodegradable: bool
+    combined_score: float
+
+
+class RecommendResponse(BaseModel):
+    product_weight_kg: float
+    shipping_distance_km: float
+    shipping_mode: str
+    optimization: str
+    recommendations: list[MaterialRecommendation]
+
+
+class HealthResponse(BaseModel):
+    status: str
+    models_loaded: bool
+    model_version: str
+
+
+class ModelInfoResponse(BaseModel):
+    model_version: str
+    training_date: str
+    model_type: str
+    co2_metrics: dict
+    cost_metrics: dict
+    total_materials: int
+    categories: list[str]
+    training_samples: int
+
+
+# ── Recommendation logic ────────────────────────────────────────────────────
+
+
+def get_recommendations(
+    weight_kg: float,
+    volume_m3: float,
+    distance_km: float,
+    shipping_mode: str,
+    optimization: str,
+) -> list[dict]:
+    """Generate top-5 packaging recommendations using the trained models."""
+    if not store.loaded:
+        raise HTTPException(status_code=503, detail="Models not loaded")
+
+    # Set optimization weights
+    weights = {"eco": (0.8, 0.2), "cost": (0.2, 0.8), "balanced": (0.6, 0.4)}
+    w_co2, w_cost = weights.get(optimization, (0.6, 0.4))
+
+    shipping_road = 1.0 if shipping_mode == "Road" else 0.0
+
+    numeric_features = store.feature_config["numeric_features"]
+    co2_features = store.feature_config["co2_features"]
+    cost_features = store.feature_config["cost_features"]
+
+    results = []
+
+    for _, mat in store.materials_df.iterrows():
+        # Build raw feature row
+        raw = {
+            "Weight_kg": weight_kg,
+            "Distance_km": distance_km,
+            "Material_CO2_Factor": mat["CO2_Emission_kg"],
+            "Material_Density": mat["Density_kg_m3"],
+            "Cost_per_kg": mat["Cost_per_kg"],
+            "Product_Volume_m3": volume_m3,
+        }
+
+        # Scale numeric features
+        raw_df = pd.DataFrame([raw])
+        scaled = store.scaler.transform(raw_df[numeric_features])
+        scaled_dict = dict(zip(numeric_features, scaled[0]))
+        scaled_dict["Shipping_Mode_Road"] = shipping_road
+
+        # Predict CO2
+        co2_input = pd.DataFrame([[scaled_dict[f] for f in co2_features]], columns=co2_features)
+        co2_pred = float(store.co2_model.predict(co2_input)[0])
+
+        # Predict Cost
+        cost_input = pd.DataFrame([[scaled_dict[f] for f in cost_features]], columns=cost_features)
+        cost_pred = float(store.cost_model.predict(cost_input)[0])
+
+        # Clamp to non-negative
+        co2_pred = max(co2_pred, 0.0)
+        cost_pred = max(cost_pred, 0.0)
+
+        results.append(
+            {
+                "material_name": mat["Material_Name"],
+                "category": mat["Category"],
+                "predicted_co2_kg": co2_pred,
+                "predicted_cost_usd": cost_pred,
+                "biodegradable": str(mat["Biodegradable"]).strip().lower() == "yes",
+            }
+        )
+
+    df = pd.DataFrame(results)
+
+    if df.empty:
+        return []
+
+    # Normalize scores (lower is better)
+    for col, score_col in [("predicted_co2_kg", "co2_score"), ("predicted_cost_usd", "cost_score")]:
+        col_min, col_max = df[col].min(), df[col].max()
+        if col_max == col_min:
+            df[score_col] = 0.0
+        else:
+            df[score_col] = (df[col] - col_min) / (col_max - col_min)
+
+    df["combined_score"] = w_co2 * df["co2_score"] + w_cost * df["cost_score"]
+
+    # Round for readability
+    df["predicted_co2_kg"] = df["predicted_co2_kg"].round(3)
+    df["predicted_cost_usd"] = df["predicted_cost_usd"].round(2)
+    df["combined_score"] = df["combined_score"].round(3)
+
+    top5 = df.nsmallest(5, "combined_score").reset_index(drop=True)
+    top5["rank"] = range(1, len(top5) + 1)
+
+    return top5[
+        ["rank", "material_name", "category", "predicted_co2_kg", "predicted_cost_usd", "biodegradable", "combined_score"]
+    ].to_dict("records")
+
+
+# ── Endpoints ────────────────────────────────────────────────────────────────
+
+
+@app.get("/health", response_model=HealthResponse, tags=["System"])
+def health():
+    """Health check endpoint."""
+    return HealthResponse(
+        status="healthy" if store.loaded else "degraded",
+        models_loaded=store.loaded,
+        model_version=store.metadata.get("model_version", "unknown"),
+    )
+
+
+@app.get("/model-info", response_model=ModelInfoResponse, tags=["System"])
 def model_info():
-    """Get model information and statistics"""
-    if models is None:
-        return jsonify({'error': 'Models not loaded'}), 500
-    
-    return jsonify({
-        'model_version': models.metadata.get('model_version', 'unknown'),
-        'training_date': models.metadata.get('training_date', 'unknown'),
-        'co2_model_type': models.metadata.get('co2_model_type', 'unknown'),
-        'cost_model_type': models.metadata.get('cost_model_type', 'unknown'),
-        'co2_rmse': models.metadata.get('co2_rmse', 'unknown'),
-        'co2_mae': models.metadata.get('co2_mae', 'unknown'),
-        'cost_rmse': models.metadata.get('cost_rmse', 'unknown'),
-        'cost_mae': models.metadata.get('cost_mae', 'unknown'),
-        'total_materials': models.metadata.get('total_materials', 0),
-        'categories': models.metadata.get('categories', [])
-    })
+    """Get model training metadata and performance metrics."""
+    if not store.loaded:
+        raise HTTPException(status_code=503, detail="Models not loaded")
+    return ModelInfoResponse(**store.metadata)
 
-if __name__ == '__main__':
-    print("🚀 Starting Eco-Friendly Packaging Recommendation System...")
-    print("📱 Access the web interface at: http://localhost:5000")
-    print("🔍 Health check: http://localhost:5000/health")
-    print("📊 Model info: http://localhost:5000/model-info")
-    print("=" * 50)
-    
-    # Run the Flask app
-    app.run(debug=True, host='0.0.0.0', port=5001)
 
+@app.post("/recommend", response_model=RecommendResponse, tags=["Recommendations"])
+def recommend(req: RecommendRequest):
+    """
+    Get top-5 eco-friendly packaging recommendations.
+
+    Provide product weight, volume, shipping distance & mode,
+    and your optimization preference (eco / cost / balanced).
+    """
+    recs = get_recommendations(
+        weight_kg=req.weight_kg,
+        volume_m3=req.volume_m3,
+        distance_km=req.distance_km,
+        shipping_mode=req.shipping_mode.value,
+        optimization=req.optimization.value,
+    )
+
+    if not recs:
+        raise HTTPException(status_code=500, detail="No recommendations generated")
+
+    return RecommendResponse(
+        product_weight_kg=req.weight_kg,
+        shipping_distance_km=req.distance_km,
+        shipping_mode=req.shipping_mode.value,
+        optimization=req.optimization.value,
+        recommendations=[MaterialRecommendation(**r) for r in recs],
+    )

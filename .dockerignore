@@ -1,0 +1,10 @@
+.git
+.gitignore
+__pycache__
+*.pyc
+.venv
+data/processed
+*.ipynb
+*.pdf
+.vscode
+deployment_models
