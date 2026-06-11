@@ -22,7 +22,7 @@ stages:
       - models/co2_model.joblib
       - models/cost_model.joblib
       - models/feature_config.joblib
-      - models/materials_db.joblib
+      - models/materials_db.csv
     metrics:
       - models/metadata.json:
           cache: false

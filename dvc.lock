@@ -1,0 +1,79 @@
+schema: '2.0'
+stages:
+  preprocess:
+    cmd: python -m src.preprocess
+    deps:
+    - path: data/raw/materials_database.csv
+      hash: md5
+      md5: 60e6001a4eb84d1e82e8b1a1034f2ffa
+      size: 36619
+    - path: data/raw/packaging_history.csv
+      hash: md5
+      md5: 32a7f9db23aa9dfb810286f45998b582
+      size: 1562764
+    - path: src/preprocess.py
+      hash: md5
+      md5: b744eed4d20bb7eaf92cb48392bf5446
+      size: 6203
+    outs:
+    - path: data/processed/cleaned_data.csv
+      hash: md5
+      md5: d7f9cd8158497b6e63ffb6188c1e7d5d
+      size: 2408665
+    - path: models/scaler.joblib
+      hash: md5
+      md5: 70ab0d126a3c8abdcef5c79538a3c70a
+      size: 1079
+  train:
+    cmd: python -m src.train
+    deps:
+    - path: data/processed/cleaned_data.csv
+      hash: md5
+      md5: d7f9cd8158497b6e63ffb6188c1e7d5d
+      size: 2408665
+    - path: models/scaler.joblib
+      hash: md5
+      md5: 70ab0d126a3c8abdcef5c79538a3c70a
+      size: 1079
+    - path: src/model.py
+      hash: md5
+      md5: c4bc23a2b08e08e21d55e7fc02d701cb
+      size: 913
+    - path: src/train.py
+      hash: md5
+      md5: 83b195fe4e336dfbe1d57ba341db9d89
+      size: 6522
+    params:
+      params.yaml:
+        split:
+          test_size: 0.2
+          random_state: 42
+        xgboost:
+          n_estimators: 200
+          max_depth: 8
+          learning_rate: 0.1
+          subsample: 0.8
+          colsample_bytree: 0.8
+          reg_alpha: 0.1
+          reg_lambda: 1.0
+    outs:
+    - path: models/co2_model.joblib
+      hash: md5
+      md5: 91ba7c72ab0ef16a150f09c3122cbc16
+      size: 1705356
+    - path: models/cost_model.joblib
+      hash: md5
+      md5: 6194bb792095f042d5aa1c62a5400680
+      size: 1332869
+    - path: models/feature_config.joblib
+      hash: md5
+      md5: 58c762ba178bc13e68a4a87e3925e482
+      size: 220
+    - path: models/materials_db.csv
+      hash: md5
+      md5: c8814ce9170ff7ea48e69f43ed5bfae8
+      size: 36643
+    - path: models/metadata.json
+      hash: md5
+      md5: 208306b20b81fd416cb0fe754b3ce34d
+      size: 602

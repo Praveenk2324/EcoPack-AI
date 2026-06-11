@@ -46,8 +46,8 @@ def load_models() -> None:
         store.feature_config = joblib.load(
             os.path.join(MODELS_DIR, "feature_config.joblib")
         )
-        store.materials_df = joblib.load(
-            os.path.join(MODELS_DIR, "materials_db.joblib")
+        store.materials_df = pd.read_csv(
+            os.path.join(MODELS_DIR, "materials_db.csv")
         )
 
         meta_path = os.path.join(MODELS_DIR, "metadata.json")

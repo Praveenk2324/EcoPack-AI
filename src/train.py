@@ -155,8 +155,8 @@ def run() -> None:
 
     # Save materials database for inference
     materials_df = pd.read_csv(MATERIALS_RAW)
-    joblib.dump(materials_df, os.path.join(MODELS_DIR, "materials_db.joblib"))
-    print("   ✅ materials_db.joblib")
+    materials_df.to_csv(os.path.join(MODELS_DIR, "materials_db.csv"), index=False)
+    print("   ✅ materials_db.csv")
 
     # Save metadata
     metadata = {
