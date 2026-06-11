@@ -6,6 +6,7 @@ __pycache__/
 .venv/
 env/
 
+data/
 # Data (processed is regenerated)
 data/processed/
 
