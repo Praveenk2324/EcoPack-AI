@@ -55,7 +55,23 @@ EcoPack-AI is a FastAPI-based backend with a Streamlit frontend that uses machin
     * **UI**: `http://localhost:8501`
     * **API Docs (Swagger UI)**: `http://localhost:8000/docs`
 
-## 📖 API Documentation
+## � How to Run with Docker
+
+You can run the entire application (both the FastAPI backend and Streamlit frontend) in a single Docker container.
+
+1.  **Build the Docker Image**
+    ```bash
+    docker build -t ecopack-ai .
+    ```
+
+2.  **Run the Container**
+    ```bash
+    docker run -p 8000:8000 -p 8501:8501 ecopack-ai
+    ```
+
+3.  **Access the Application**: Open `http://localhost:8501` in your browser.
+
+## �📖 API Documentation
 
 The application provides several endpoints for developers and external integrations.
 
